@@ -20,11 +20,15 @@ import java.net.URL;
 import java.net.URI;
 import java.io.DataOutputStream;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.InputStreamReader;
 import java.net.CookieManager;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.Charset;
+import java.nio.ByteBuffer;
+import java.io.OutputStreamWriter;
 
 import com.facebook.react.bridge.WritableMap;
 import java.io.FileInputStream;
@@ -64,8 +68,6 @@ public class FileUploadModule extends ReactContextBaseJavaModule {
         ReadableArray files = options.getArray("files");
         ReadableMap fields = options.getMap("fields");
 
-
-
         HttpURLConnection connection = null;
         DataOutputStream outputStream = null;
         DataInputStream inputStream = null;
@@ -97,7 +99,9 @@ public class FileUploadModule extends ReactContextBaseJavaModule {
             }
 
             connection.setRequestProperty("Connection", "Keep-Alive");
-            connection.setRequestProperty("Content-Type", "multipart/form-data;boundary="+boundary);
+            connection.setRequestProperty("Content-Type", "multipart/form-data; charset=utf-8; boundary="+boundary);
+            connection.setRequestProperty("Accept-Charset","utf-8");
+            connection.setRequestProperty("Charset","utf-8");
 
             // set headers
             ReadableMapKeySetIterator iterator = headers.keySetIterator();
@@ -112,10 +116,10 @@ public class FileUploadModule extends ReactContextBaseJavaModule {
             ReadableMapKeySetIterator fieldIterator = fields.keySetIterator();
             while (fieldIterator.hasNextKey()) {
                 outputStream.writeBytes(twoHyphens + boundary + lineEnd);
-
                 String key = fieldIterator.nextKey();
-                outputStream.writeBytes("Content-Disposition: form-data; name=\"" + key +  "\"" + lineEnd + lineEnd);
-                outputStream.writeBytes(fields.getString(key));
+                Log.i(this.getName(), "Key " + key + " " + fields.getString(key));
+                outputStream.writeBytes("Content-Disposition: form-data; name=\"" + key +  "\"" + lineEnd + "Content-Type: text/plain; charset=utf-8" + lineEnd + lineEnd);
+                connection.getOutputStream().write(fields.getString(key).getBytes("UTF-8"));
                 outputStream.writeBytes(lineEnd);
             }
 
@@ -155,32 +159,27 @@ public class FileUploadModule extends ReactContextBaseJavaModule {
                     bytesRead = fileInputStream.read(buffer, 0, bufferSize);
                 }
 
-                Log.i(this.getName(), "File read ready");
-
                 outputStream.writeBytes(lineEnd);
             }
-
-            Log.i(this.getName(), "Before out");
 
             outputStream.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
 
             // Responses from the server (code and message)
-
-            Log.i(this.getName(), "Before connection");
-
             int serverResponseCode = connection.getResponseCode();
             String serverResponseMessage = connection.getResponseMessage();
             Log.i(this.getName(), "Got response");
 
             if (serverResponseCode != 200 && serverResponseCode != 201) {
-                Log.i(this.getName(), "Not 200");
+                Log.i(this.getName(), "Not 200 " + serverResponseCode);
+                callback.invoke("Error happened: " + serverResponseMessage, null);
 
                 if (fileInputStream != null) {
                     fileInputStream.close();
                 }
+                //out.close();
                 outputStream.flush();
                 outputStream.close();
-                callback.invoke("Error happened: " + serverResponseMessage, null);
+
             } else {
                 Log.i(this.getName(), "Ok");
 
@@ -200,14 +199,16 @@ public class FileUploadModule extends ReactContextBaseJavaModule {
                 Bundle bundle = bjc.convertToBundle(mainObject);
                 WritableMap map = Arguments.fromBundle(bundle);
 
+                callback.invoke(null, map);
+
                 if (fileInputStream != null) {
                     fileInputStream.close();
                 }
-                
+                //out.close();
                 outputStream.flush();
                 outputStream.close();
-                callback.invoke(null, map);
             }
+
 
             Log.i(this.getName(), "End");
 
